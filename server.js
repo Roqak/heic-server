@@ -27,13 +27,35 @@ app.post('/convert', async (req, res) => {
     try {
         console.log(`Processing ${imageFile.name} (${imageFile.size} bytes) -> ${format}`);
 
-        const outputBuffer = await heicConvert({
-            buffer: imageFile.data,
-            format: format.toUpperCase(), // 'JPEG' or 'PNG'
-            quality: quality
-        });
+        // Check if input is already JPEG or PNG
+        const header = imageFile.data.slice(0, 4).toString('hex');
+        const isJpeg = header.startsWith('ffd8');
+        const isPng = header.startsWith('89504e47');
 
-        res.set('Content-Type', format === 'PNG' ? 'image/png' : 'image/jpeg');
+        let outputBuffer;
+
+        if (isJpeg || isPng) {
+            console.log('Input is already JPEG/PNG, passing through...');
+            // Ideally we could use Sharp here to resize/reformat if needed, 
+            // but to keep dependencies minimal (avoiding sharp install issues), we just return the buffer.
+            // If the user requested PNG but got JPEG, we ideally convert, but passthrough prevents crash.
+            outputBuffer = imageFile.data;
+
+            // basic format adjustment if we really want to be correct (requires Sharp or similar if we want to change format)
+            // For now: Preventing the crash is priority.
+
+            // Adjust response content type based on actual detection
+            res.set('Content-Type', isPng ? 'image/png' : 'image/jpeg');
+        } else {
+            // Assume HEIC
+            outputBuffer = await heicConvert({
+                buffer: imageFile.data,
+                format: format.toUpperCase(), // 'JPEG' or 'PNG'
+                quality: quality
+            });
+            res.set('Content-Type', format === 'PNG' ? 'image/png' : 'image/jpeg');
+        }
+
         res.send(outputBuffer);
         console.log(`Converted successfully.`);
 
